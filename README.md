@@ -1,5 +1,7 @@
 ## Hi there 👋
 
+<!-- Hello! 👋 Thanks for stopping by my profile. -->
+
 <!--
 **heekum-Kim/Heekum-Kim** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
