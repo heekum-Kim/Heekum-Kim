@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ---
 type: spec
 capability: marginal-analysis
@@ -78,7 +79,8 @@ TOTAL_LABOR_HRS = LABOR_HRS(TOM, TOM_BEDS) + LABOR_HRS(CAR, CAR_BEDS) + LABOR_HR
 TEMP_WORKERS = ROUNDUP( MAX(0, TOTAL_LABOR_HRS − FARMER_HRS) / TEMP_HRS_EACH, 0 )
   — capped at TEMP_MAX; if it would exceed 4, that constraint binds
 
-TOTAL_LABOR_HRS_PAID = FARMER_HRS + (TEMP_WORKERS × TEMP_HRS_EACH) -TOTAL_LABOR_DOLLARS = FARMER_PAY + (TEMP_WORKERS × TEMP_PAY_EACH)
+TOTAL_LABOR_HRS_PAID = FARMER_HRS + (TEMP_WORKERS × TEMP_HRS_EACH) 
+TOTAL_LABOR_DOLLARS = FARMER_PAY + (TEMP_WORKERS × TEMP_PAY_EACH)
 BLENDED_RATE = TOTAL_LABOR_DOLLARS / TOTAL_LABOR_HRS_PAID
 
 CROP_COST(crop, q) = ( LABOR_HRS(crop, q) × BLENDED_RATE ) + ( q × {crop}_FERT )
@@ -160,3 +162,5 @@ anything that is missing.
 3. Ask me the questions whose answers are missing from this document.
 
 Then stop. I will make the changes.
+=======
+
