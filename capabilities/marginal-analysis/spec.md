@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ---
 type: spec
 capability: marginal-analysis
@@ -162,5 +161,3 @@ anything that is missing.
 3. Ask me the questions whose answers are missing from this document.
 
 Then stop. I will make the changes.
-=======
-
