@@ -174,4 +174,25 @@ Reported on the Results sheet, each as a named range:
 3. Added an explicit Solver constraint: `TOTAL_LABOR_HRS` ≤ `FARMER_HRS` + (`TEMP_MAX` × `TEMP_HRS_EACH`) = 6,480 hours.
 4. Solver engine: GRG Nonlinear, with `TOM_BEDS`/`CAR_BEDS`/`MES_BEDS` constrained to integers.
 
-Full audit (structural checks, hand calc, Solver runs from two starting points, formula/error-cell sweep) still to come after first push.
+**Build (2026-09-19).** Built by `build_workbook.py` in this folder; see `README.md` to run it and
+`audit.md` for the full findings. Four further findings came out of the build:
+
+5. **A-1 — `CAR_HRS` rounding accounts for the entire season-profit delta.** The published $42,762
+   is reproduced exactly by the unrounded 5/6 (0.8333…); the spec's contract value of 0.833 returns
+   ≈ $42,769. The optimal mix is identical under either value. The workbook keeps 0.833 and
+   reconciles the two on Checks §6 rather than editing the input to make the check pass.
+6. **A-2 — hiring the 4th temp worker is not the same as the worker cap binding.** `TEMP_WORKERS`
+   rounds up, so the optimum hires 4 while using only ≈ 3.2 workers' worth of hours, with ≈ 1,203
+   hours of slack. `TEMP_MAX_SHADOW` therefore tests `TOTAL_LABOR_HRS` against `LABOR_HRS_CAP`, not
+   the headcount against `TEMP_MAX`.
+7. **A-3 — the standalone P = MC crossings are a diagnostic, not an allocation.** Standalone they
+   land at 10 / 10 / 6; jointly carrots and mesclun are worth running to their caps of 20 and 30,
+   because standalone each crop gets the farmer's cheap 720-hour tier to itself while jointly all
+   three share it and every marginal hour prices at `TEMP_RATE`.
+8. **A-4 — binding constraints are the two per-crop bed caps, not land or labor.** Carrots and
+   mesclun bind (shadow prices ≈ +$353 and ≈ +$247 per bed); the 64-bed total, the tomato cap and
+   the labor caps are all slack at $0.
+
+Remaining after this push: the intermediate Farm Profit Lab chart cross-check and the two Solver
+starting-point runs, both of which need Excel and the live Lab. Expected values for both are
+pre-stated on the Checks sheet.
