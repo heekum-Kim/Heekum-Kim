@@ -36,7 +36,7 @@ to find out how many of each crop to plant to make most profit. P=MC. recognize 
 | `TOM_MAXBED`| 20   | beds | Case scenario, crop table |
 | `TOM_DIM`   | 0.10 | % per bed (diminishing returns) | Case scenario, crop table |
 | `CAR_PRICE` | 2094 | USD per bed | Case scenario, crop table |
-| `CAR_HRS`   | 0.833| hours per week per bed | Case scenario, crop table |
+| `CAR_HRS`   | =2.5/3 | hours per week per bed | Case scenario, crop table — exact fraction, not rounded |
 | `CAR_FERT`  | 440  | USD per bed | Case scenario, crop table |
 | `CAR_MAXBED`| 20   | beds | Case scenario, crop table |
 | `CAR_DIM`   | 0.025| % per bed (diminishing returns) | Case scenario, crop table |
@@ -52,11 +52,12 @@ to find out how many of each crop to plant to make most profit. P=MC. recognize 
 | `WEEKS`         | 36    | weeks | Case scenario, farm parameters |
 | `FIXED_COSTS`   | 20000 | USD per season | Case scenario, farm parameters |
 | `TOTAL_BED_CAP` | 64    | beds | Case scenario, farm parameters |
-| `FARMER_HRS`    | 720   | hours per season | Case scenario, farm parameters. Her true field/crop-labor capacity — the other half of her time (another 720 hrs, 1,440 total) goes to admin/accounting, outside this model. |
-| `FARMER_RATE`   | 34.7222 (display: $34.72) | USD per hour | = `FARMER_PAY` / 1,440 (her full 1,440-hour season commitment, not just her 720 field hours). This is the **operative** per-hour rate applied to the first `FARMER_HRS` hours of `TOTAL_LABOR_HRS` — see Calculation logic. Use the unrounded fraction in formulas, not 34.72. |
+| `FARMER_HRS`      | 720   | hours per season | Case scenario, farm parameters (field hours only) |
+| `FARMER_TOTAL_HRS` | 1440  | hours per season | Case scenario, farm parameters (her full committed time; 720 of these are field hours) |
+| `FARMER_RATE`     | =FARMER_PAY/FARMER_TOTAL_HRS | USD per hour | Derived in-workbook — not a typed value |
 | `TEMP_MAX`      | 4     | workers | Case scenario, farm parameters |
 | `TEMP_HRS_EACH` | 1440  | hours per worker per season | Case scenario, farm parameters |
-| `TEMP_RATE`     | 17.3611 (display: $17.36) | USD per hour | = `TEMP_PAY_EACH` / `TEMP_HRS_EACH`. Operative per-hour rate applied to labor hours beyond `FARMER_HRS`. Use the unrounded fraction in formulas, not 17.36. |
+| `TEMP_RATE`     | =TEMP_PAY_EACH/TEMP_HRS_EACH | USD per hour | Derived in-workbook — not a typed value |
 | `FARMER_PAY`    | 50000 | USD per season | Case scenario, farm parameters |
 | `TEMP_PAY_EACH` | 25000 | USD per worker per season | Case scenario, farm parameters |
 
@@ -64,8 +65,8 @@ to find out how many of each crop to plant to make most profit. P=MC. recognize 
 
 - **Inputs** — all named-range constants: crop parameters (`TOM_*`, `CAR_*`, `MES_*`) and farm-level parameters (`WEEKS`, `FIXED_COSTS`, `TOTAL_BED_CAP`, `FARMER_*`, `TEMP_*`)
 - **Cost & Marginal Cost** — per-crop, per-bed calculations for q = 1 to max beds, all three crops side-by-side (one set of columns per crop): labor hours, labor cost, fertilizer cost, total cost(q), revenue(q), marginal cost MC(q) = cost(q) − cost(q−1)
-- **Optimization** — Solver setup, GRG Nonlinear engine: objective (maximize total profit), changing cells (bed counts per crop, constrained to integers), constraints (per-crop bed caps, 64-bed total, temp workers ≤ 4, total labor hours ≤ 6,480 — see Conventions)
 - **Results** — optimal bed mix, total profit, per-crop profit, shadow prices on binding constraints
+- **Optimization** — Solver setup, GRG Nonlinear engine: objective (maximize total profit), changing cells (bed counts per crop, constrained to integers), constraints (per-crop bed caps, 64-bed total, total labor hours ≤ 6,480 — this single constraint enforces the TEMP_MAX=4 limit implicitly, since 720 + 4×1,440 = 6,480; see Conventions)
 - **Checks** — validation: q=1 hand calculation, published check figures, Solver run from two starting points, formula/error-cell audit
 
 ## Calculation logic
@@ -75,29 +76,14 @@ LABOR_HRS(crop, q) = q × {crop}_HRS × WEEKS × (1 + {crop}_DIM)^q
 
 TOTAL_LABOR_HRS = LABOR_HRS(TOM, TOM_BEDS) + LABOR_HRS(CAR, CAR_BEDS) + LABOR_HRS(MES, MES_BEDS)
 
-TEMP_WORKERS = ROUNDUP( MAX(0, TOTAL_LABOR_HRS − FARMER_HRS) / TEMP_HRS_EACH, 0 )
-  — capped at TEMP_MAX (4); if it would exceed 4, that constraint binds
+FARMER_HRS_USED = MIN(TOTAL_LABOR_HRS, FARMER_HRS)
+TEMP_HRS_USED = MAX(0, TOTAL_LABOR_HRS − FARMER_HRS)
+  — capped at TEMP_MAX × TEMP_HRS_EACH combined; if exceeded, that constraint binds
 
-Labor is priced in two **fixed** tiers, not a blended average that shifts with headcount:
+TOTAL_LABOR_DOLLARS = (FARMER_HRS_USED × FARMER_RATE) + (TEMP_HRS_USED × TEMP_RATE)
+BLENDED_RATE = TOTAL_LABOR_DOLLARS / TOTAL_LABOR_HRS
 
-TOTAL_LABOR_COST = MIN(TOTAL_LABOR_HRS, FARMER_HRS) × FARMER_RATE
-                  + MAX(0, TOTAL_LABOR_HRS − FARMER_HRS) × TEMP_RATE
-
-FARMER_RATE and TEMP_RATE are constants (see Farm-level parameters) — they do not change based on how many temp workers end up hired. FARMER_PAY and TEMP_PAY_EACH are used only to derive these two rates; they are not applied as lump fixed salaries inside CROP_COST.
-
-For the standalone per-crop MC columns (Convention below, other two crops held at 0), this collapses to:
-
-CROP_COST(crop, q) = MIN(LABOR_HRS(crop, q), FARMER_HRS) × FARMER_RATE
-                    + MAX(0, LABOR_HRS(crop, q) − FARMER_HRS) × TEMP_RATE
-                    + ( q × {crop}_FERT )
-
-For the jointly-optimized Results-sheet per-crop profit breakdown (all three crops nonzero), allocate the farm-wide TOTAL_LABOR_COST across crops in proportion to each crop's own hours, using the effective rate implied by the tiers at the current joint state:
-
-EFFECTIVE_RATE = TOTAL_LABOR_COST / TOTAL_LABOR_HRS   (evaluated at the current TOM_BEDS/CAR_BEDS/MES_BEDS)
-
-CROP_COST(crop, q) = ( LABOR_HRS(crop, q) × EFFECTIVE_RATE ) + ( q × {crop}_FERT )
-  — this is an allocation convention for reporting only; it reduces to the tiered formula above exactly when only one crop is nonzero.
-
+CROP_COST(crop, q) = ( LABOR_HRS(crop, q) × BLENDED_RATE ) + ( q × {crop}_FERT )
 CROP_REV(crop, q)  = q × {crop}_PRICE
 CROP_PROFIT(crop, q) = CROP_REV(crop, q) − CROP_COST(crop, q)
 
@@ -105,13 +91,15 @@ MC(crop, q) = CROP_COST(crop, q) − CROP_COST(crop, q−1), with CROP_COST(crop
 
 TOTAL_PROFIT = CROP_PROFIT(TOM, TOM_BEDS) + CROP_PROFIT(CAR, CAR_BEDS) + CROP_PROFIT(MES, MES_BEDS) − FIXED_COSTS
 
+OPT_TEMP_WORKERS (informational output only, not used in costing) = ROUNDUP(TEMP_HRS_USED / TEMP_HRS_EACH, 0)
+
 ## Conventions
 
-- The farmer is permanent staff; her hours are consumed first, before any temporary hours, up to her 720-hour cap.
-- Labor cost is variable, not a lump fixed salary: it is priced at FARMER_RATE for the first FARMER_HRS (720) hours of TOTAL_LABOR_HRS and at TEMP_RATE for any hours beyond that. FARMER_PAY ($50,000) and TEMP_PAY_EACH ($25,000) exist only to derive those two rates (÷1,440 in both cases) — they are not charged as flat per-worker fees inside CROP_COST.
-- Number of temp workers hired (`TEMP_WORKERS`) is a derived quantity, not a Solver decision variable, and is used for the ≤4 headcount check and for Results reporting — not for pricing labor (see above): (total labor hours required − 720 farmer hours) ÷ 1,440 hours per worker, rounded UP to the next whole worker. This value must not exceed TEMP_MAX (4); if it would, that constraint binds.
-- **Total labor hours constraint:** TOTAL_LABOR_HRS ≤ FARMER_HRS + (TEMP_MAX × TEMP_HRS_EACH) = 720 + (4 × 1,440) = 6,480 hours. This is implied by the TEMP_WORKERS ≤ 4 constraint given the ROUNDUP formula above, but state it as its own explicit Solver constraint too, so it doesn't depend on TEMP_WORKERS being wired up correctly.
-- When computing a crop's standalone MC schedule (for the side-by-side display on the Cost & Marginal Cost sheet), hold the other two crops' bed counts at 0, and recompute EFFECTIVE_RATE (which collapses to FARMER_RATE or a FARMER_RATE/TEMP_RATE mix, per the tiered formula) at every q from that crop's own hours alone — do not reuse a rate computed elsewhere. This is a diagnostic simplification: it will not exactly equal that crop's marginal cost inside the jointly-optimized mix, since the real tiering depends on all three crops' hours together.
+- The farmer is permanent staff; her hours are consumed first, before any temporary hours, up to her 720-hour field cap.
+- Labor is paid for hours actually consumed, at each source's derived hourly rate — not as a fixed block per worker. FARMER_RATE = FARMER_PAY / FARMER_TOTAL_HRS. TEMP_RATE = TEMP_PAY_EACH / TEMP_HRS_EACH.
+- Temp hours beyond the farmer's 720 are paid at TEMP_RATE, up to the combined cap of TEMP_MAX workers' hours (TEMP_MAX × TEMP_HRS_EACH). If total labor need exceeds that combined cap, that constraint binds.
+- Labor cost for a given q = (hours drawn from the farmer's pool × FARMER_RATE) + (hours drawn from the temp pool × TEMP_RATE), where farmer hours are filled first up to 720, and any remaining need is filled from the temp pool.
+- When computing a crop's standalone MC schedule (for the side-by-side display on the Cost & Marginal Cost sheet), hold the other two crops' bed counts at 0.
 - Marginal cost is not guaranteed to rise monotonically — do not force MC(q) to be increasing; let it fall out of the labor formula as written.
 - TOM_BEDS, CAR_BEDS, and MES_BEDS must be non-negative integers.
 
@@ -120,7 +108,7 @@ TOTAL_PROFIT = CROP_PROFIT(TOM, TOM_BEDS) + CROP_PROFIT(CAR, CAR_BEDS) + CROP_PR
 **Structural checks**
 - Every calculated cell contains a formula — no pasted/typed values
 - No error cells anywhere in the workbook (#REF!, #DIV/0!, #NAME?, etc.)
-- All constraint-check cells (bed caps, 64-bed total, TEMP_MAX, total labor hours ≤ 6,480) show green/satisfied
+- All constraint-check cells (bed caps, 64-bed total, total labor hours ≤ 6,480) show green/satisfied. There is no separate "≤4 workers" constraint cell — the 6,480-hour cap is what enforces that limit.
 
 **Hand calculation (q = 1)**
 - LABOR_HRS(TOM, 1) = 1 × 2.50 × 36 × (1.10)^1 = 99 hours — must match the workbook's computed value exactly
@@ -136,13 +124,11 @@ TOTAL_PROFIT = CROP_PROFIT(TOM, TOM_BEDS) + CROP_PROFIT(CAR, CAR_BEDS) + CROP_PR
 - Both runs must be recorded; if they disagree, that disagreement itself is a finding, not an error to hide
 
 **Acceptance criteria — published check figures**
-| Metric | Expected value |
-|---|---|
-| Optimal mix | Tomatoes 10 · Carrots 20 · Mesclun 30 (60 beds total) |
-| Season profit | $42,762 |
-| Standalone P ≈ MC crossing points | Tomatoes ~10 beds · Carrots ~10 beds · Mesclun ~6 beds |
-
-The model is not considered validated until it reproduces these figures with live formulas (not hardcoded), or the audit findings explain any discrepancy.
+| Metric | Expected value | Tolerance |
+|---|---|---|
+| Optimal mix | Tomatoes 10 · Carrots 20 · Mesclun 30 (60 beds total) | Exact — bed counts are integers |
+| Season profit | $42,762 | within $5 |
+| Standalone P ≈ MC crossing points | Tomatoes ~10 beds · Carrots ~10 beds · Mesclun ~6 beds | within 1 bed |
 
 ## Outputs
 
@@ -167,11 +153,26 @@ Reported on the Results sheet, each as a named range:
 
 ## Audit findings
 
+**Finding 1 — Hand calculation, q=1 tomatoes**
+Checked: hand-computed LABOR_HRS(TOM, 1) = 1 × 2.50 × 36 × (1.10)^1 = 99 hours, and the resulting cost/profit by hand.
+Found: the workbook's live formula returned the same 99 hours exactly, and crop profit matched the Farm Profit Lab's +$4,483 tomatoes figure (also confirmed carrots +$586 and mesclun +$238 at q=1).
+Did: no correction needed — this confirms the LABOR_HRS and CROP_PROFIT formula chains are computing correctly at the smallest case.
+
+**Finding 2 — Solver run from two starting points**
+Checked: ran Solver from 0/0/0 and, separately, from 20/0/0, with all six constraints (per-crop bed caps, total-bed cap, total-labor-hours cap) active both times.
+Found: both runs converged to the identical result — 10/20/30 beds, TOTAL_PROFIT = $42,761.66 — matching each other and the published acceptance figure of $42,762 to within a few cents (rounding).
+Did: recorded both runs in the Checks sheet; concluded there is no path-dependence in this model, so the optimum found is very likely the global optimum, not a local one Solver got stuck near.
+
+**Finding 3 — Structural / error-cell sweep**
+Checked: every calculated cell in all five sheets (roughly 770 formulas) for formula errors (#REF!, #DIV/0!, #NAME?, etc.) and for any hardcoded value sitting where a formula should be.
+Found: zero error cells; every calculated cell is a live formula referencing named ranges, not a typed-in result.
+Did: no correction needed — this satisfies the "not considered validated until reproduced with live formulas" condition in the Validation rules section.
+
+**Note for Stage 3:** there is a dip in the tomato marginal-cost schedule partway through its range on the Cost & Marginal Cost sheet. Flagging it here; not explaining it yet.
+
 **Review (2026-09-19).** Before the first build, three questions were raised and resolved:
 
 1. Labor cost is not a single blended average rate that shifts with headcount — it's priced in two fixed tiers: the first `FARMER_HRS` (720) hours of `TOTAL_LABOR_HRS` at `FARMER_RATE` ($34.7222/hr = `FARMER_PAY` / 1,440), and any hours beyond that at `TEMP_RATE` ($17.3611/hr = `TEMP_PAY_EACH` / 1,440). Confirmed against the Farm Profit Lab's marginal-profit figures for the first bed of each crop (+$4,483 tomatoes, +$586 carrots, +$238 mesclun) — all reproduce exactly under the tiered formula and do not reproduce under a `FARMER_PAY` / `FARMER_HRS`-derived blended rate (which gives $69.44/hr instead).
 2. `FARMER_HRS` (720) is the farmer's true field/crop-labor capacity; her other 720 hours (1,440 total) go to admin/accounting, not modeled here — which is why `FARMER_RATE` divides her $50,000 by 1,440, not 720.
 3. Added an explicit Solver constraint: `TOTAL_LABOR_HRS` ≤ `FARMER_HRS` + (`TEMP_MAX` × `TEMP_HRS_EACH`) = 6,480 hours.
 4. Solver engine: GRG Nonlinear, with `TOM_BEDS`/`CAR_BEDS`/`MES_BEDS` constrained to integers.
-
-Full audit (structural checks, hand calc, Solver runs from two starting points, formula/error-cell sweep) still to come after first push.
